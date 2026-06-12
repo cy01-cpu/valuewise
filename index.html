@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<!-- 移除 maximum-scale / user-scalable=no：允許縮放是無障礙基本要求，且 iOS 早已忽略此鎖定。viewport-fit=cover 讓 safe-area 變數生效 --><meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>比價小幫手</title>
 <style>
 :root {
@@ -29,6 +29,8 @@ body{background:var(--bg);font-family:-apple-system,'Helvetica Neue',Arial,sans-
 /* PAGES */
 .page{display:none;flex-direction:column;flex:1;padding:0 12px 110px;overflow-y:auto;}
 .page.active{display:flex;}
+/* 自訂鍵盤開啟時撐開底部留白，避免最後一張卡片被鍵盤遮住 */
+.page.kb-open{padding-bottom:340px;}
 
 /* ════════════════════
    BASIC COMPARE PAGE
@@ -102,7 +104,7 @@ body{background:var(--bg);font-family:-apple-system,'Helvetica Neue',Arial,sans-
 .kb-key{background:#fff;padding:16px 0;font-size:20px;font-weight:400;text-align:center;cursor:pointer;border:none;transition:background .1s;color:var(--text);}
 .kb-key:active{background:#C8C8CC;}
 .kb-key.clear{color:var(--danger);font-size:16px;font-weight:600;}
-.kb-done{width:100%;padding:16px;background:var(--accent-btn);color:#fff;font-size:17px;font-weight:600;border:none;cursor:pointer;}
+.kb-done{width:100%;padding:16px;padding-bottom:calc(16px + env(safe-area-inset-bottom));background:var(--accent-btn);color:#fff;font-size:17px;font-weight:600;border:none;cursor:pointer;}
 .kb-done:active{opacity:.85;}
 
 /* SAVED */
@@ -247,6 +249,8 @@ body{background:var(--bg);font-family:-apple-system,'Helvetica Neue',Arial,sans-
       <button class="kb-arrow" onclick="focusNext()">▼</button>
     </div>
     <div class="kb-hint-label" id="kbHintLabel"></div>
+    <!-- 清除鍵移到提示列，把鍵盤最後一列讓給小數點 -->
+    <button class="kb-arrow" style="font-size:13px;color:var(--danger);font-weight:600;" onclick="kbClear()">清除</button>
   </div>
   <div class="kb-grid">
     <button class="kb-key" onclick="kbInput('1')">1</button>
@@ -258,7 +262,7 @@ body{background:var(--bg);font-family:-apple-system,'Helvetica Neue',Arial,sans-
     <button class="kb-key" onclick="kbInput('7')">7</button>
     <button class="kb-key" onclick="kbInput('8')">8</button>
     <button class="kb-key" onclick="kbInput('9')">9</button>
-    <button class="kb-key clear" onclick="kbClear()">清除</button>
+    <button class="kb-key" onclick="kbInput('.')">.</button>
     <button class="kb-key" onclick="kbInput('0')">0</button>
     <button class="kb-key" onclick="kbBackspace()">⌫</button>
   </div>
@@ -379,19 +383,19 @@ function advRender() {
       <div class="field-row"><div class="field-icon">💰</div>
         <div class="field-col">
           <div class="field-label">售價（${currency}）</div>
-          <div class="field-input ${apF?'active-field':''}" onclick="openKb(${p.id},'price')">${p.price||'<span style="color:#C7C7CC">0.00</span>'}</div>
+          <div class="field-input ${apF?'active-field':''}" onclick="openKb(${p.id},'price')">${p.price?esc(p.price):'<span style="color:#C7C7CC">0.00</span>'}</div>
         </div>
       </div>
       <div class="field-row"><div class="field-icon">⚖️</div>
         <div class="field-col">
           <div class="field-label">數量／容量</div>
-          <div class="field-input ${apQ?'active-field':''}" onclick="openKb(${p.id},'qty')">${p.qty||'<span style="color:#C7C7CC">0</span>'}</div>
+          <div class="field-input ${apQ?'active-field':''}" onclick="openKb(${p.id},'qty')">${p.qty?esc(p.qty):'<span style="color:#C7C7CC">0</span>'}</div>
         </div>
       </div>
       <div class="unit-result">
         ${isW?'<div class="best-badge">🏆 最划算</div>':''}
         <div class="unit-price-value">${up!==null?fmtPrice(up):'—'}</div>
-        ${up!==null?`<div class="unit-price-label">每單位 · ${currency}${p.price}/${p.qty}</div>`:''}
+        ${up!==null?`<div class="unit-price-label">每單位 · ${esc(currency)}${esc(p.price)}/${esc(p.qty)}</div>`:''}
       </div>
       <div style="text-align:right;margin-top:10px;">
         <button class="save-btn" onclick="saveProduct(${p.id})">💾 儲存</button>
@@ -424,16 +428,25 @@ function openKb(pid, field) {
   const p=products.find(x=>x.id===pid), i=products.indexOf(p);
   document.getElementById('kbHintLabel').textContent=`正在編輯：商品 ${i+1} 的${field==='price'?'售價':'數量'}`;
   document.getElementById('keyboard').classList.add('visible');
+  document.getElementById('page-advanced').classList.add('kb-open');
   advRender();
   setTimeout(()=>{const el=document.getElementById('card-'+pid);if(el)el.scrollIntoView({behavior:'smooth',block:'center'});},50);
 }
-function hideKb(){document.getElementById('keyboard').classList.remove('visible');activeFieldInfo=null;advRender();}
+function hideKb(){document.getElementById('keyboard').classList.remove('visible');document.getElementById('page-advanced').classList.remove('kb-open');activeFieldInfo=null;advRender();}
 function kbInput(v){
   if(!activeFieldInfo)return;
   const p=products.find(x=>x.id===activeFieldInfo.productId);
   if(!p)return;
-  if(v==='.'&&p[activeFieldInfo.field].includes('.'))return;
-  p[activeFieldInfo.field]+=v; advRender();
+  let cur=p[activeFieldInfo.field];
+  // 防呆：限制長度，避免超大數字撐破版面或運算成 Infinity
+  if(cur.replace('.','').length>=12)return;
+  // 防呆：小數點最多一個
+  if(v==='.'&&cur.includes('.'))return;
+  // 防呆：直接按小數點時自動補成 "0."
+  if(v==='.'&&cur==='')cur='0';
+  // 防呆：消除「007」這種多餘前導零（保留 "0." 的情況）
+  if(cur==='0'&&v!=='.')cur='';
+  p[activeFieldInfo.field]=cur+v; advRender();
   const i=products.indexOf(p);
   document.getElementById('kbHintLabel').textContent=`正在編輯：商品 ${i+1} 的${activeFieldInfo.field==='price'?'售價':'數量'}`;
 }
@@ -458,27 +471,49 @@ let savedItems=[];
 function saveProduct(id){
   const p=products.find(x=>x.id===id);
   const pr=parseFloat(p.price),q=parseFloat(p.qty);
-  if(!pr||!q){showToast('請先輸入售價和數量');return;}
+  // 改用 >0 判斷：原本的 !pr||!q 會讓負數（truthy）矇混過關
+  if(!(pr>0)||!(q>0)){showToast('請先輸入正確的售價和數量');return;}
+  // 重複儲存防護：相同 售價 + 數量 + 當下幣別 視為同一筆，避免連點重複存入
+  if(savedItems.some(it=>it.price===p.price&&it.qty===p.qty&&it.cur===currency)){
+    showToast('這組數值已儲存過了');return;
+  }
   const i=products.indexOf(p);
-  savedItems.push({id:Date.now(),name:`商品 ${i+1}`,price:p.price,qty:p.qty,unitPrice:pr/q,savedAt:new Date().toLocaleString('zh-TW')});
+  // 連同「當下幣別」與「當下格式化字串」一起存：
+  // 這樣日後切換幣別時，舊紀錄不會被全域 currency 影響而失真
+  savedItems.push({id:Date.now(),name:`商品 ${i+1}`,price:p.price,qty:p.qty,cur:currency,unitPriceStr:fmtPrice(pr/q),savedAt:new Date().toLocaleString('zh-TW')});
+  persist();
   showToast(`已儲存！每單位 ${fmtPrice(pr/q)}`);
   renderSaved();
 }
 function renderSaved(){
   const list=document.getElementById('savedList');
   if(savedItems.length===0){list.innerHTML='<div class="saved-empty">📭 還沒有儲存的商品<br><br>在比價頁面點「儲存」就會出現在這裡</div>';return;}
+  // 全部使用 esc() 跳脫：縱深防禦，未來若加入自訂商品名稱也不會被 XSS 注入
   list.innerHTML=[...savedItems].reverse().map(item=>`
     <div class="saved-item">
-      <div><div class="saved-name">${item.name}</div><div class="saved-detail">${currency}${item.price} / ${item.qty} · ${item.savedAt}</div></div>
+      <div><div class="saved-name">${esc(item.name)}</div><div class="saved-detail">${esc(item.cur||currency)}${esc(item.price)} / ${esc(item.qty)} · ${esc(item.savedAt)}</div></div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
-        <div class="saved-price">${fmtPrice(item.unitPrice)}</div>
-        <button class="saved-restore-btn" onclick="restoreProduct(${item.id})">帶入比價</button>
+        <div class="saved-price">${esc(item.unitPriceStr||fmtPrice(item.unitPrice))}</div>
+        <div style="display:flex;gap:6px;">
+          <button class="saved-restore-btn" onclick="restoreProduct(${item.id})">帶入比價</button>
+          <button class="saved-restore-btn" style="background:none;color:var(--danger);" onclick="deleteSaved(${item.id})">🗑️</button>
+        </div>
       </div>
     </div>`).join('');
 }
+// 新增：刪除單筆已儲存商品
+function deleteSaved(id){
+  savedItems=savedItems.filter(x=>x.id!==id);
+  persist();
+  renderSaved();
+  showToast('已刪除');
+}
 function restoreProduct(savedId){
   const item=savedItems.find(x=>x.id===savedId);if(!item)return;
-  addProduct();const p=products[products.length-1];p.price=item.price;p.qty=item.qty;
+  // 優先找現有的空白卡填入，避免每次帶入都新增、累積一堆空商品
+  let p=products.find(x=>x.price===''&&x.qty==='');
+  if(!p){addProduct();p=products[products.length-1];}
+  p.price=item.price;p.qty=item.qty;
   advRender();switchTab('advanced');showToast('已帶入進階比價！');
 }
 
@@ -488,8 +523,9 @@ function setTheme(theme,el){
   if(theme)document.body.classList.add(theme);
   document.querySelectorAll('.theme-swatch').forEach(s=>s.classList.remove('active'));
   el.classList.add('active');
+  persist();
 }
-function setCurrency(val){currency=val;basicUpdate();advRender();}
+function setCurrency(val){currency=val;persist();basicUpdate();advRender();}
 
 // TABS
 const pageTitles={basic:'比價',advanced:'進階比價',saved:'已儲存',settings:'設定'};
@@ -516,17 +552,53 @@ function switchTab(tab){
 
 // UTIL
 function fmtPrice(val){
-  if(val===null||val===undefined)return'—';
+  // 加上 !isFinite 防護：避免超大數字相除後印出「NT$Infinity」
+  if(val===null||val===undefined||!isFinite(val))return'—';
   if(val>=10)return currency+val.toFixed(2);
   if(val>=1) return currency+val.toFixed(3);
   return currency+parseFloat(val.toPrecision(4)).toString();
 }
+// 將 HTML 特殊字元跳脫，所有透過 innerHTML 注入的使用者資料都要先過這層（防 XSS）
+function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+
+let toastTimer=null;
 function showToast(msg){
   const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');
-  setTimeout(()=>t.classList.remove('show'),2200);
+  // 清掉前一個計時器，避免快速連續 toast 互相干擾、提前消失
+  clearTimeout(toastTimer);
+  toastTimer=setTimeout(()=>t.classList.remove('show'),2200);
+}
+
+// ── 本地儲存（localStorage）─────────────────────────────
+// 解決「重整頁面資料消失」：已儲存商品、幣別、主題色寫入瀏覽器，下次造訪自動還原
+const LS_KEY='valuewise.v1';
+function persist(){
+  try{
+    const theme=(document.body.className.match(/theme-\w+/)||[''])[0];
+    localStorage.setItem(LS_KEY,JSON.stringify({savedItems,currency,theme}));
+  }catch(e){/* 無痕模式或容量已滿時略過，不影響正常使用 */}
+}
+function loadState(){
+  let data=null;
+  try{data=JSON.parse(localStorage.getItem(LS_KEY)||'null');}catch(e){data=null;}
+  if(!data)return;
+  if(Array.isArray(data.savedItems))savedItems=data.savedItems;
+  if(data.currency){
+    currency=data.currency;
+    const sel=document.getElementById('currencySelect');
+    if(sel)sel.value=data.currency;
+  }
+  if(data.theme){
+    document.body.classList.add(data.theme);
+    // 同步把對應色票標示為選取（預設紫色 theme 為空字串，故不需處理）
+    document.querySelectorAll('.theme-swatch').forEach(s=>{
+      s.classList.toggle('active',(s.getAttribute('onclick')||'').includes(`'${data.theme}'`));
+    });
+  }
 }
 
 // INIT
+loadState();   // 先還原上次的設定與資料，再初始化畫面
 advInit();
 renderSaved();
 </script>
